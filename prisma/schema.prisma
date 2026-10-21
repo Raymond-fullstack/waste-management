@@ -1,0 +1,347 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role { 
+  HOUSEHOLD 
+  COLLECTOR 
+  RECYCLER 
+  ADMIN 
+}
+
+enum WasteType { 
+  ORGANIC 
+  PLASTIC 
+  METAL 
+  GLASS 
+  PAPER 
+  HAZARDOUS 
+  ELECTRONIC 
+  MIXED 
+}
+
+enum PickupStatus { 
+  PENDING 
+  ACCEPTED 
+  EN_ROUTE 
+  COLLECTED 
+  DELIVERED 
+  CANCELLED 
+}
+
+enum CollectorStatus { 
+  PENDING_VERIFICATION 
+  ACTIVE 
+  SUSPENDED 
+  REJECTED 
+}
+
+enum CollectorRequestStatus { 
+  PENDING 
+  APPROVED 
+  REJECTED 
+}
+
+enum BidStatus { 
+  PENDING 
+  ACCEPTED 
+  REJECTED 
+  WITHDRAWN 
+}
+enum NotificationType { 
+  PICKUP_REQUEST 
+  PICKUP_ACCEPTED 
+  PICKUP_COLLECTED 
+  PICKUP_DELIVERED 
+  BID_RECEIVED 
+  BID_ACCEPTED 
+  BID_REJECTED 
+  COLLECTOR_REQUEST 
+  COLLECTOR_APPROVED 
+  COLLECTOR_REJECTED 
+  RATING_RECEIVED 
+  SYSTEM 
+}
+
+enum TransactionType { 
+  PICKUP_PAYMENT 
+  BID_PAYMENT 
+  BONUS 
+  PENALTY 
+}
+
+model District {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  zones             Zone[]
+  householdProfiles HouseholdProfile[]
+}
+model Zone {
+  id                String   @id @default(cuid())
+  districtId        String
+  name              String
+  code              String   @unique
+  maxCollectors     Int      @default(10)
+  collectorsEnabled Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  district          District           @relation(fields: [districtId], references: [id])
+  householdProfiles HouseholdProfile[]
+  collectorProfiles CollectorProfile[]
+  collectorRequests CollectorRequest[]
+  @@unique([districtId, name])
+  @@index([districtId])
+}
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  label     String?
+  updatedAt DateTime @updatedAt
+}
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  password     String
+  role         Role
+  phone        String?
+  isActive     Boolean  @default(true)
+  isFirstLogin Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  householdProfile HouseholdProfile?
+  collectorProfile CollectorProfile?
+  recyclerProfile  RecyclerProfile?
+  collectorRequest CollectorRequest?
+  pickupRequests   PickupRequest[]  @relation("HouseholdPickups")
+  ratingsGiven     Rating[]         @relation("RatingsGiven")
+  ratingsReceived  Rating[]         @relation("RatingsReceived")
+  notifications    Notification[]
+  transactions     Transaction[]
+  @@index([email])
+  @@index([role])
+}
+model HouseholdProfile {
+  id           String  @id @default(cuid())
+  userId       String  @unique
+  address      String
+  districtId   String?
+  zoneId       String?
+  latitude     Float?
+  longitude    Float?
+  totalWaste   Float   @default(0)
+  totalPickups Int     @default(0)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  district District? @relation(fields: [districtId], references: [id])
+  zone     Zone?     @relation(fields: [zoneId], references: [id])
+  @@index([zoneId])
+}
+model CollectorProfile {
+  id              String          @id @default(cuid())
+  userId          String          @unique
+  vehicleType     String
+  vehiclePlate    String
+  licenseNumber   String          @unique
+  status          CollectorStatus @default(PENDING_VERIFICATION)
+  zoneId          String?
+  latitude        Float?
+  longitude       Float?
+  totalCollected  Float           @default(0)
+  totalEarnings   Float           @default(0)
+  totalDeliveries Int             @default(0)
+  rating          Float           @default(0)
+  ratingCount     Int             @default(0)
+  isAvailable     Boolean         @default(true)
+  verifiedAt      DateTime?
+  verifiedBy      String?
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone         Zone?              @relation(fields: [zoneId], references: [id])
+  assignments  PickupAssignment[]
+  bids         WasteBid[]
+  @@index([zoneId])
+  @@index([status])
+}
+model CollectorRequest {
+  id            String                 @id @default(cuid())
+  userId        String                 @unique
+  vehicleType   String
+  vehiclePlate  String
+  zoneId        String?
+  reason        String?                @db.Text
+  status        CollectorRequestStatus @default(PENDING)
+  licenseNumber String?
+  assignedZone  String?
+  adminNote     String?
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone Zone? @relation(fields: [zoneId], references: [id])
+  @@index([status])
+}
+model RecyclerProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  companyName     String
+  businessLicense String
+  address         String
+  latitude        Float?
+  longitude       Float?
+  wasteTypes      Json
+  capacity        Float
+  totalProcessed  Float    @default(0)
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bids WasteBid[]
+}
+model WasteCategory {
+  id                 String    @id @default(cuid())
+  name               String    @unique
+  type               WasteType @unique
+  description        String?
+  baseFee            Float     @default(5000)
+  collectorFeePerKg  Float     @default(200)
+  recyclerPricePerKg Float     @default(500)
+  recyclingRate      Float     @default(0)
+  color              String    @default("#10b981")
+  isActive           Boolean   @default(true)
+  pickupRequests PickupRequest[]
+  @@index([type])
+}
+model PickupRequest {
+  id              String       @id @default(cuid())
+  householdId     String
+  categoryId      String
+  wasteType       WasteType
+  estimatedWeight Float
+  actualWeight    Float?
+  description     String?
+  address         String
+  latitude        Float?
+  longitude       Float?
+  status          PickupStatus @default(PENDING)
+  estimatedFee    Float        @default(0)
+  actualFee       Float?
+  preferredDate   DateTime?
+  scheduledAt     DateTime?
+  collectedAt     DateTime?
+  deliveredAt     DateTime?
+  notes           String?      @db.Text
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  household  User              @relation("HouseholdPickups", fields: [householdId], references: [id])
+  category   WasteCategory     @relation(fields: [categoryId], references: [id])
+  assignment PickupAssignment?
+  bids       WasteBid[]
+  rating     Rating?
+  @@index([householdId])
+  @@index([status])
+  @@index([wasteType])
+  @@index([createdAt])
+}
+model PickupAssignment {
+  id          String    @id @default(cuid())
+  pickupId    String    @unique
+  collectorId String
+  assignedAt  DateTime  @default(now())
+  acceptedAt  DateTime?
+  enRouteAt   DateTime?
+  collectedAt DateTime?
+  deliveredAt DateTime?
+  fee         Float     @default(0)
+  notes       String?
+  pickup    PickupRequest    @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  collector CollectorProfile @relation(fields: [collectorId], references: [id])
+  @@index([collectorId])
+}
+model WasteBid {
+  id          String    @id @default(cuid())
+  pickupId    String
+  recyclerId  String
+  collectorId String
+  pricePerKg  Float
+  totalOffer  Float
+  message     String?
+  status      BidStatus @default(PENDING)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  pickup    PickupRequest    @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  recycler  RecyclerProfile  @relation(fields: [recyclerId], references: [id])
+  collector CollectorProfile @relation(fields: [collectorId], references: [id])
+  @@unique([pickupId, recyclerId])
+  @@index([status])
+  @@index([collectorId])
+  @@index([recyclerId])
+}
+model Rating {
+  id         String   @id @default(cuid())
+  pickupId   String   @unique
+  giverId    String
+  receiverId String
+  score      Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  pickup   PickupRequest @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  giver    User          @relation("RatingsGiven", fields: [giverId], references: [id])
+  receiver User          @relation("RatingsReceived", fields: [receiverId], references: [id])
+}
+model Transaction {
+  id          String          @id @default(cuid())
+  userId      String
+  amount      Float
+  type        TransactionType
+  description String
+  reference   String?
+  createdAt   DateTime        @default(now())
+  user User @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([createdAt])
+}
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+model LandfillSite {
+  id             String   @id @default(cuid())
+  name           String
+  location       String
+  latitude       Float
+  longitude      Float
+  maxCapacity    Float
+  currentLoad    Float    @default(0)
+  alertThreshold Float    @default(0.80)
+  isActive       Boolean  @default(true)
+  lastUpdated    DateTime @default(now())
+  createdAt      DateTime @default(now())
+}
+model DailyAnalytics {
+  id               String   @id @default(cuid())
+  date             DateTime @unique
+  totalPickups     Int      @default(0)
+  completedPickups Int      @default(0)
+  totalWeightKg    Float    @default(0)
+  recycledWeightKg Float    @default(0)
+  activeCollectors Int      @default(0)
+  newHouseholds    Int      @default(0)
+  revenue          Float    @default(0)
+  createdAt        DateTime @default(now())
+  @@index([date])
+}

@@ -11,27 +11,8 @@ dist/
 .env*
 !.env.example
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-pnpm-debug.log*
 
-# Test and coverage output
-coverage/
 
-# Local databases
-*.db
-*.sqlite
-*.sqlite3
 
-# Deployment platform output
-.vercel/
-.netlify/
 
-# OS and editor files
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-package.json
+
